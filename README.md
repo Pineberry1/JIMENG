@@ -18,6 +18,14 @@ jimeng对话app
 
 ![image-20251117210736863](.\imgs\image-20251117210736863.png)
 
+熟悉了MVI代码组织架构范式，把代码转换成了MVI的架构
+
+- components -> view层发送intent
+- model 定义了数据模型和状态定义
+- viewmodel 处理intent然后更新view
+
+![image-20251118153711279](imgs\image-20251118153711279.png)
+
 ## IOS平台
 
 XCODE搭建需要MACBOOK支持，所以只能配置一个macos的虚拟机尝试进行开发，网上的资料说intel架构的苹果的m芯片架构比较相似比较容易配置，amd的只能配置12以下的版本，而且还需要开启cpu虚拟化。
