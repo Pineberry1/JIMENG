@@ -1,46 +1,42 @@
 package com.example.myapplication.feature.chat
 
+import android.app.Application
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.myapplication.feature.chat.components.ChatInputBar
-import com.example.myapplication.feature.chat.components.MessageBubble
-import com.example.myapplication.feature.chat.model.ChatMessage
+import com.example.myapplication.feature.chat.components.MessageList
+import com.example.myapplication.feature.chat.components.ModelSelector
 import com.example.myapplication.feature.chat.viewmodel.ChatIntent
-import com.example.myapplication.feature.chat.viewmodel.ChatSideEffect
 import com.example.myapplication.feature.chat.viewmodel.ChatViewModel
-import kotlinx.coroutines.launch
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.ui.unit.dp
+import com.example.myapplication.feature.chat.viewmodel.ChatViewModelFactory
+import com.example.myapplication.feature.chat.viewmodel.ChatSideEffect
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ChatScreen(viewModel: ChatViewModel = viewModel()) {
+fun ChatScreen(
+    viewModel: ChatViewModel = viewModel(factory = ChatViewModelFactory(LocalContext.current.applicationContext as Application)),
+    onNavigateToSettings: () -> Unit
+) {
     val state by viewModel.state.collectAsState()
     val context = LocalContext.current
+    var showSettingsMenu by remember { mutableStateOf(false) }
 
     LaunchedEffect(key1 = Unit) {
         viewModel.sideEffect.collect { sideEffect ->
             when (sideEffect) {
                 is ChatSideEffect.ShowError -> {
-                    android.widget.Toast.makeText(
-                        context,
-                        sideEffect.message,
-                        android.widget.Toast.LENGTH_SHORT
-                    ).show()
-                }
-                is ChatSideEffect.ShowSuccess -> {
-                    android.widget.Toast.makeText(
-                        context,
-                        sideEffect.message,
-                        android.widget.Toast.LENGTH_SHORT
-                    ).show()
+                    android.widget.Toast.makeText(context, sideEffect.message, android.widget.Toast.LENGTH_SHORT).show()
                 }
                 else -> {}
             }
@@ -49,16 +45,28 @@ fun ChatScreen(viewModel: ChatViewModel = viewModel()) {
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
+        topBar = {
+            TopAppBar(
+                title = { ModelSelector(state.currentModelName, state.availableModels) { viewModel.processIntent(ChatIntent.SelectModel(it)) } },
+                actions = {
+                    IconButton(onClick = { showSettingsMenu = !showSettingsMenu }) {
+                        Icon(Icons.Default.MoreVert, contentDescription = "More options")
+                    }
+                    DropdownMenu(
+                        expanded = showSettingsMenu,
+                        onDismissRequest = { showSettingsMenu = false }
+                    ) {
+                        DropdownMenuItem(text = { Text("Model Settings") }, onClick = onNavigateToSettings)
+                    }
+                }
+            )
+        },
         bottomBar = {
             ChatInputBar(
                 inputText = state.inputText,
                 isLoading = state.isLoading,
-                onInputTextChanged = { text ->
-                    viewModel.processIntent(ChatIntent.UpdateInputText(text))
-                },
-                onSendMessage = { text ->
-                    viewModel.processIntent(ChatIntent.SendMessage(text))
-                }
+                onInputTextChanged = { text -> viewModel.processIntent(ChatIntent.UpdateInputText(text)) },
+                onSendMessage = { text -> viewModel.processIntent(ChatIntent.SendMessage(text)) }
             )
         }
     ) { innerPadding ->
@@ -73,38 +81,5 @@ fun ChatScreen(viewModel: ChatViewModel = viewModel()) {
             }
             MessageList(messages = state.messages)
         }
-    }
-}
-
-@Composable
-private fun MessageList(messages: List<ChatMessage>) {
-    val listState = rememberLazyListState()
-    val coroutineScope = rememberCoroutineScope()
-
-    LaunchedEffect(messages.size) {
-        if (messages.isNotEmpty()) {
-            coroutineScope.launch {
-                listState.animateScrollToItem(messages.size - 1)
-            }
-        }
-    }
-
-    androidx.compose.foundation.lazy.LazyColumn(
-        modifier = Modifier, // ✅ 正确的 weight 用法
-        state = listState,
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        items(messages) { message ->
-            MessageBubble(message)
-        }
-    }
-}
-
-@Preview(showBackground = true)
-@Composable
-fun ChatPreview() {
-    MaterialTheme {
-        ChatScreen()
     }
 }
