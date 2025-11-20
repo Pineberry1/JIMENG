@@ -1,10 +1,11 @@
 package com.example.myapplication.feature.chat.viewmodel
 
 import android.app.Application
-import android.content.pm.ApplicationInfo
+import android.os.Debug
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.myapplication.BuildConfig
 import com.example.myapplication.feature.chat.model.ChatMessage
 import com.example.myapplication.feature.chat.model.ChatState
 import com.example.myapplication.feature.chat.model.Message
@@ -30,8 +31,7 @@ class ChatViewModel(
     val sideEffect: SharedFlow<ChatSideEffect> = _sideEffect.asSharedFlow()
 
     init {
-        val isDebuggable = (application.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
-        if (isDebuggable) {
+        if (BuildConfig.DEBUG && Debug.isDebuggerConnected()) {
             // --- Easy Switch for Debugging ---
             processIntent(ChatIntent.StartDebugSequence(DebugCases.case2))
             // -----------------------------------

@@ -2,7 +2,7 @@
 plugins {
     alias(libs.plugins.android.application) apply false
     alias(libs.plugins.kotlin.android) apply false
-    alias(libs.plugins.compose.compiler) apply false
-    //alias(libs.plugins.jetbrains.kotlin.android)
-    // 【新增】应用 Compose 编译器插件
+    alias(libs.plugins.kotlin.compose) apply false
+    // Use the alias from libs.versions.toml to ensure version compatibility
+    id("com.google.devtools.ksp") version "2.0.21-1.0.27" apply false
 }
