@@ -15,7 +15,10 @@ import com.example.myapplication.feature.chat.model.ChatMessage
 import kotlinx.coroutines.launch
 
 @Composable
-fun MessageList(messages: List<ChatMessage>) {
+fun MessageList(
+    messages: List<ChatMessage>,
+    onSaveImageClicked: (String) -> Unit
+) {
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
 
@@ -33,9 +36,15 @@ fun MessageList(messages: List<ChatMessage>) {
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // Provide a stable key for each item. This is crucial for performance and correctness.
         items(messages, key = { it.id }) { message ->
-            MessageBubble(message)
+            if (message.imageUrl != null) {
+                ImageMessageItem(
+                    imageUrl = message.imageUrl,
+                    onSaveClicked = onSaveImageClicked
+                )
+            } else {
+                MessageBubble(message)
+            }
         }
     }
 }

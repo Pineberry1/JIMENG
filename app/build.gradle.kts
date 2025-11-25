@@ -4,6 +4,7 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     // Use the alias to apply the KSP plugin, ensuring version compatibility
     id("com.google.devtools.ksp")
+    //id("org.jetbrains.dokka") version "2.0.0"
 }
 
 android {
@@ -18,6 +19,7 @@ android {
         targetSdk = 36
         versionCode = 1
         versionName = "1.0"
+        buildConfigField("String", "DASHSCOPE_API_KEY", project.property("DASHSCOPE_API_KEY").toString())
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -54,6 +56,7 @@ dependencies {
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
+    implementation("androidx.compose.material:material-icons-extended:+")
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
@@ -70,6 +73,13 @@ dependencies {
     implementation("androidx.navigation:navigation-compose:2.7.7")
     implementation("com.google.android.material:material:1.12.0")
 
+    // Coil for image loading
+    implementation("io.coil-kt:coil-compose:2.6.0")
+
+    // RichText library for Markdown rendering from Maven Central
+    implementation("com.halilibo.compose-richtext:richtext-ui-material3:1.0.0-alpha01")
+    implementation("com.halilibo.compose-richtext:richtext-markdown:1.0.0-alpha01")
+    implementation("com.halilibo.compose-richtext:richtext-commonmark:1.0.0-alpha01")
     // Room Database dependencies using aliases from libs.versions.toml
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)

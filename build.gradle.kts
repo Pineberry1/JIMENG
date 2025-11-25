@@ -5,4 +5,5 @@ plugins {
     alias(libs.plugins.kotlin.compose) apply false
     // Use the alias from libs.versions.toml to ensure version compatibility
     id("com.google.devtools.ksp") version "2.0.21-1.0.27" apply false
+
 }
