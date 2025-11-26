@@ -36,7 +36,7 @@ class SettingsViewModel(private val repository: ModelSettingsRepository) : ViewM
                 topP = topP,
                 temperature = temperature
             )
-            repository.updateConfig(updatedConfig)
+            repository.saveConfig(updatedConfig)
         }
     }
 }

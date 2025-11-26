@@ -17,7 +17,7 @@ class MainActivity : ComponentActivity() {
         // Initialize the database with default values on app startup
         // Using a custom scope to run this on a background thread
         CoroutineScope(Dispatchers.IO).launch {
-            ModelSettingsRepository(applicationContext).populateInitialData()
+            ModelSettingsRepository(application).populateInitialData()
         }
 
         enableEdgeToEdge()

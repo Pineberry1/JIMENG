@@ -2,16 +2,16 @@ package com.example.myapplication.feature.chat
 
 import android.app.Application
 import android.widget.Toast
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.myapplication.feature.chat.components.*
 import com.example.myapplication.feature.chat.viewmodel.ChatIntent
@@ -92,21 +92,46 @@ fun ChatScreen(
                 )
             },
             bottomBar = {
-                 ChatInputBar(
-                    inputText = state.inputText,
-                    isLoading = state.isLoading,
-                    onInputTextChanged = { text -> viewModel.processIntent(ChatIntent.UpdateInputText(text)) },
-                    onSendMessage = { text ->
-                        val activeConversation = state.getActiveConversation()
-                        viewModel.processIntent(
-                            ChatIntent.SendMessage(
-                                text = text,
-                                modelName = activeConversation?.modelName ?: selectedModel,
-                                isNewConversation = activeConversation == null
+                 Column {
+                    val isTextModel = state.getActiveConversation()?.modelName?.startsWith("qwen") ?: true &&
+                            state.getActiveConversation()?.modelName != "qwen-image-plus"
+                    if (isTextModel) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp),
+                            horizontalArrangement = Arrangement.End,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("联网搜索")
+                            Switch(
+                                checked = state.enableSearch,
+                                onCheckedChange = { viewModel.processIntent(ChatIntent.SetEnableSearch(it)) }
                             )
-                        )
+                            Spacer(modifier = Modifier.width(16.dp))
+                            Text("深度思考")
+                            Switch(
+                                checked = state.enableThinking,
+                                onCheckedChange = { viewModel.processIntent(ChatIntent.SetEnableThinking(it)) }
+                            )
+                        }
                     }
-                )
+                    ChatInputBar(
+                        inputText = state.inputText,
+                        isLoading = state.isLoading,
+                        onInputTextChanged = { text -> viewModel.processIntent(ChatIntent.UpdateInputText(text)) },
+                        onSendMessage = { text ->
+                            val activeConversation = state.getActiveConversation()
+                            viewModel.processIntent(
+                                ChatIntent.SendMessage(
+                                    text = text,
+                                    modelName = activeConversation?.modelName ?: selectedModel,
+                                    isNewConversation = activeConversation == null
+                                )
+                            )
+                        }
+                    )
+                }
             }
         ) { innerPadding ->
             Box(modifier = Modifier.padding(innerPadding).fillMaxSize()) {
@@ -120,7 +145,7 @@ fun ChatScreen(
                     )
                 } else {
                     MessageList(
-                        messages = activeConversation?.messages ?: emptyList(),
+                        messages = message,
                         onSaveImageClicked = { imageUrl ->
                             viewModel.processIntent(ChatIntent.SaveImageToGallery(imageUrl))
                         }

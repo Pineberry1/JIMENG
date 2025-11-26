@@ -1,17 +1,21 @@
-package com.example.myapplication.feature.settings.model
+package com.example.myapplication.feature.chat.persistence
 
 import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import com.example.myapplication.feature.chat.model.ChatMessage
+import com.example.myapplication.feature.chat.model.ConversationEntity
+import com.example.myapplication.feature.settings.model.ModelConfigDao
+import com.example.myapplication.feature.settings.model.ModelConfigEntity
 
-@Database(entities = [ModelConfigEntity::class], version = 1)
+@Database(entities = [ConversationEntity::class, ChatMessage::class, ModelConfigEntity::class], version = 1)
 abstract class AppDatabase : RoomDatabase() {
 
+    abstract fun conversationDao(): ConversationDao
     abstract fun modelConfigDao(): ModelConfigDao
 
     companion object {
-        // Singleton prevents multiple instances of database opening at the same time.
         @Volatile
         private var INSTANCE: AppDatabase? = null
 
@@ -21,9 +25,10 @@ abstract class AppDatabase : RoomDatabase() {
                     context.applicationContext,
                     AppDatabase::class.java,
                     "app_database"
-                ).build()
+                )
+                .fallbackToDestructiveMigration()
+                .build()
                 INSTANCE = instance
-                // return instance
                 instance
             }
         }

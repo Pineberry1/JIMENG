@@ -21,13 +21,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.myapplication.R
 import com.example.myapplication.feature.chat.model.ChatMessage
-
 import com.halilibo.richtext.commonmark.CommonmarkAstNodeParser
 import com.halilibo.richtext.markdown.BasicMarkdown
 import com.halilibo.richtext.ui.material3.RichText
@@ -37,6 +35,7 @@ fun MessageBubble(message: ChatMessage) {
     val isUser = message.isUser
     val alignment = if (isUser) Alignment.End else Alignment.Start
     val bubbleColor = if (isUser) Color(0xFF007AFF) else Color.White
+    val reasonBubbleColor = if (isUser) bubbleColor.copy(alpha = 0.8f) else Color(0xFFF0F0F0)
     val textColor = if (isUser) Color.White else Color.Black
 
     val shape = if (isUser) {
@@ -63,28 +62,53 @@ fun MessageBubble(message: ChatMessage) {
                 )
             }
 
-            Surface(
-                color = bubbleColor,
-                shape = shape,
-                shadowElevation = 2.dp,
-                modifier = Modifier.widthIn(max = screenWidth * 0.8f)
-            ) {
-                Column(modifier = Modifier.padding(12.dp)) {
-                    CompositionLocalProvider(LocalContentColor provides textColor) {
-                        RichText {
-                            val parser = remember { CommonmarkAstNodeParser() }
-                            val astNode = remember(parser, message.text) {
-                                parser.parse(message.text)
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                message.reason_text?.let { reasonText ->
+                    if (reasonText.isNotBlank()) {
+                        Surface(
+                            color = reasonBubbleColor,
+                            shape = shape,
+                            shadowElevation = 1.dp,
+                            modifier = Modifier.widthIn(max = screenWidth * 0.8f)
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                CompositionLocalProvider(LocalContentColor provides textColor) {
+                                    RichText {
+                                        val parser = remember { CommonmarkAstNodeParser() }
+                                        val astNode = remember(parser, reasonText) {
+                                            parser.parse(reasonText)
+                                        }
+                                        BasicMarkdown(astNode)
+                                    }
+                                }
                             }
-                            BasicMarkdown(astNode)
                         }
                     }
-                    Text(
-                        text = message.timestamp,
-                        color = textColor.copy(alpha = 0.7f),
-                        fontSize = 12.sp,
-                        modifier = Modifier.padding(top = 4.dp)
-                    )
+                }
+
+                Surface(
+                    color = bubbleColor,
+                    shape = shape,
+                    shadowElevation = 2.dp,
+                    modifier = Modifier.widthIn(max = screenWidth * 0.8f)
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        CompositionLocalProvider(LocalContentColor provides textColor) {
+                            RichText {
+                                val parser = remember { CommonmarkAstNodeParser() }
+                                val astNode = remember(parser, message.text) {
+                                    parser.parse(message.text)
+                                }
+                                BasicMarkdown(astNode)
+                            }
+                        }
+                        Text(
+                            text = message.timestamp,
+                            color = textColor.copy(alpha = 0.7f),
+                            fontSize = 12.sp,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+                    }
                 }
             }
         }

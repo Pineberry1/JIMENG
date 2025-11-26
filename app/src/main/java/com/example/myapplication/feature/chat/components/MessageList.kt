@@ -36,7 +36,7 @@ fun MessageList(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        items(messages, key = { it.id }) { message ->
+        items(messages, key = { it.id  }) { message ->
             if (message.imageUrl != null) {
                 ImageMessageItem(
                     imageUrl = message.imageUrl,

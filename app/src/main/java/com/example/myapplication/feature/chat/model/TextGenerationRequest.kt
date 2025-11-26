@@ -1,5 +1,6 @@
 package com.example.myapplication.feature.chat.model
 
+import com.example.myapplication.feature.chat.viewmodel.ChatIntent
 import com.google.gson.annotations.SerializedName
 
 data class stream_option(
@@ -17,6 +18,8 @@ data class TextGenerationRequest(
     val stream: Boolean,
     @SerializedName("stream_options")
     val stream_option: stream_option,
-/*    @SerializedName("parameters")
-    val parameters: Parameters*/
+    @SerializedName("enable_search")
+    val enable_search: Boolean,
+    @SerializedName("enable_thinking")
+    val enable_thinking: Boolean
 )

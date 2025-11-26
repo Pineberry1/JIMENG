@@ -5,15 +5,22 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import com.example.myapplication.feature.settings.model.ModelSettingsRepository
 import com.example.myapplication.BuildConfig
+import com.example.myapplication.feature.chat.persistence.AppDatabase
+import com.example.myapplication.feature.chat.persistence.ConversationRepository
 
 class ChatViewModelFactory(private val application: Application) : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(ChatViewModel::class.java)) {
-            val repository = ModelSettingsRepository(application)
+            val settingsRepository = ModelSettingsRepository(application)
             val chatWithHttp = ChatWithHttp(BuildConfig.DASHSCOPE_API_KEY)
-            // Pass the application context to the ViewModel
-            return ChatViewModel(application, chatWithHttp, repository) as T
+            
+            // Create database and repository for conversations
+            val database = AppDatabase.getDatabase(application)
+            val conversationRepository = ConversationRepository(database.conversationDao())
+
+            // Pass the application context and repositories to the ViewModel
+            return ChatViewModel(application, chatWithHttp, settingsRepository, conversationRepository) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }

@@ -7,7 +7,9 @@ data class ChatState(
     val isLoading: Boolean = false,
     val error: String? = null,
     val imageGenParams: ImageGenParams = ImageGenParams(),
-    val availableModels: List<String> = listOf("qwen-plus", "qwen-image-plus")
+    val availableModels: List<String> = listOf("qwen-plus", "qwen-image-plus"),
+    val enableSearch: Boolean = false,
+    val enableThinking: Boolean = false
 ) {
     fun getActiveConversation(): Conversation? {
         return conversations.find { it.id == activeConversationId }

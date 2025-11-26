@@ -9,8 +9,12 @@ import com.example.myapplication.BuildConfig
 import com.example.myapplication.feature.chat.model.ChatMessage
 import com.example.myapplication.feature.chat.model.ChatState
 import com.example.myapplication.feature.chat.model.Conversation
+import com.example.myapplication.feature.chat.model.ConversationEntity
+import com.example.myapplication.feature.chat.model.ConversationWithMessages
 import com.example.myapplication.feature.chat.model.ImageGenParams
 import com.example.myapplication.feature.chat.model.Message
+import com.example.myapplication.feature.chat.model.StreamDelta
+import com.example.myapplication.feature.chat.persistence.ConversationRepository
 import com.example.myapplication.feature.chat.util.ImageSaver
 import com.example.myapplication.feature.settings.model.ModelSettingsRepository
 import com.google.gson.Gson
@@ -26,23 +30,38 @@ import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import java.util.UUID
 
 class ChatViewModel(
     private val application: Application,
     private val chatWithHttp: ChatWithHttp,
-    private val settingsRepository: ModelSettingsRepository
+    private val settingsRepository: ModelSettingsRepository,
+    private val conversationRepository: ConversationRepository
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(ChatState())
     val state: StateFlow<ChatState> = _state.asStateFlow()
-
+    private val gson = Gson()
     private val _sideEffect = MutableSharedFlow<ChatSideEffect>()
     val sideEffect: SharedFlow<ChatSideEffect> = _sideEffect.asSharedFlow()
+    private var tempMessageIdCounter = -1L
 
     init {
+        loadConversations()
         if (BuildConfig.DEBUG && Debug.isDebuggerConnected()) {
             processIntent(ChatIntent.StartDebugSequence(DebugCases.case3, DebugCases.modelName))
+        }
+    }
+
+    private fun loadConversations() {
+        viewModelScope.launch {
+            val conversationsFromDb = conversationRepository.getConversationsWithMessages()
+            val conversations = conversationsFromDb.map { it.toConversation() }
+            _state.update {
+                it.copy(
+                    conversations = conversations,
+                    activeConversationId = conversations.firstOrNull()?.id
+                )
+            }
         }
     }
 
@@ -50,12 +69,27 @@ class ChatViewModel(
         when (intent) {
             is ChatIntent.UpdateInputText -> updateInputText(intent.text)
             is ChatIntent.SendMessage -> sendMessage(intent.text, intent.modelName, intent.isNewConversation)
-            is ChatIntent.SelectModel -> selectModel(intent.modelName)
+            is ChatIntent.SelectModel -> viewModelScope.launch { selectModel(intent.modelName) }
             is ChatIntent.SwitchConversation -> switchConversation(intent.conversationId)
             is ChatIntent.UpdateImageGenParams -> updateImageGenParams(intent.params)
             is ChatIntent.SaveImageToGallery -> saveImageToGallery(intent.imageUrl)
-            is ChatIntent.StartDebugSequence -> startDebugSequence(intent.prompts, intent.modelName)
+            is ChatIntent.SetEnableSearch -> _state.update { it.copy(enableSearch = intent.enabled) }
+            is ChatIntent.SetEnableThinking -> _state.update { it.copy(enableThinking = intent.enabled) }
+            is ChatIntent.StartDebugSequence -> startDebugSequence(DebugCases.case2, DebugCases.modelName)
             ChatIntent.ClearInput -> clearInput()
+            is ChatIntent.DeleteConversation -> {
+                viewModelScope.launch {
+                    conversationRepository.deleteConversation(intent.conversationId)
+                    // Also remove from UI state
+                    _state.update {
+                        val conversations = it.conversations.filter { conv -> conv.id != intent.conversationId }
+                        it.copy(
+                            conversations = conversations,
+                            activeConversationId = if(it.activeConversationId == intent.conversationId) conversations.firstOrNull()?.id else it.activeConversationId
+                        )
+                    }
+                }
+            }
         }
     }
 
@@ -67,11 +101,13 @@ class ChatViewModel(
         _state.update { it.copy(inputText = "") }
     }
 
-    private fun selectModel(modelName: String) {
-        val newConversation = Conversation(modelName = modelName)
+    private suspend fun selectModel(modelName: String, title: String = "New Chat") {
+        val newConversationEntity = ConversationEntity(modelName = modelName, title = title)
+        conversationRepository.insertConversation(newConversationEntity)
+        val newConversation = newConversationEntity.toConversation()
         _state.update {
             it.copy(
-                conversations = it.conversations + newConversation,
+                conversations = listOf(newConversation) + it.conversations,
                 activeConversationId = newConversation.id
             )
         }
@@ -94,7 +130,7 @@ class ChatViewModel(
         clearInput()
 
         viewModelScope.launch {
-             if (isNewConversation || _state.value.activeConversationId == null) {
+            if (isNewConversation || _state.value.activeConversationId == null) {
                 selectModel(modelName)
             }
             executeConversationTurn(text)
@@ -104,13 +140,7 @@ class ChatViewModel(
     private fun startDebugSequence(prompts: List<String>, modelName: String = "qwen-plus") {
         viewModelScope.launch {
             Log.d("ChatViewModel", "start debug")
-            val newConversation = Conversation(modelName = modelName)
-            _state.update {
-                it.copy(
-                    conversations = it.conversations + newConversation,
-                    activeConversationId = newConversation.id
-                )
-            }
+            selectModel(modelName, "Debug Test")
             for (prompt in prompts) {
                 executeConversationTurn(prompt)
                 delay(2000)
@@ -119,18 +149,18 @@ class ChatViewModel(
     }
 
     private suspend fun executeConversationTurn(text: String) {
+
         val activeConversationId = _state.value.activeConversationId ?: return
-        
-        val userMessage = ChatMessage(UUID.randomUUID().toString(), text, true, getCurrentTimestamp())
+        val userMessage = ChatMessage(id = tempMessageIdCounter--, conversationId = activeConversationId, text = text, isUser = true, timestamp = getCurrentTimestamp())
         updateConversationMessages(activeConversationId, _state.value.getActiveConversation()!!.messages + userMessage)
 
-        val aiMessage = ChatMessage(UUID.randomUUID().toString(), "", false, getCurrentTimestamp())
+        val aiMessage = ChatMessage(id = tempMessageIdCounter--, conversationId = activeConversationId, text = "", isUser = false, timestamp = getCurrentTimestamp())
         updateConversationMessages(activeConversationId, _state.value.getActiveConversation()!!.messages + aiMessage)
 
         _state.update { it.copy(isLoading = true) }
-
         try {
             val currentConversation = _state.value.getActiveConversation()!!
+
             when (currentConversation.modelName) {
                 "qwen-image-plus" -> executeImageGeneration(currentConversation)
                 else -> executeTextGeneration(currentConversation)
@@ -144,25 +174,49 @@ class ChatViewModel(
     }
 
     private suspend fun executeTextGeneration(conversation: Conversation) {
-        // Filter out the empty AI placeholder message before sending
         val history = conversation.messages
             .filter { it.text.isNotBlank() }
             .map { Message(role = if (it.isUser) "user" else "assistant", content = it.text) }
-        
-        val modelConfig = settingsRepository.getConfig(conversation.modelName)
 
         Log.d("ChatViewModel", "prepare text generation request...")
         Log.d("ChatViewModel", "modelName: ${conversation.modelName}")
         Log.d("ChatViewModel", "history: ${Gson().toJson(history)}")
-        Log.d("ChatViewModel", "modelConfig: $modelConfig")
+
 
         Log.d("ChatViewModel", "Starting to collect from generateStream")
-        chatWithHttp.generateStream(conversation.modelName, history, modelConfig?.topP, modelConfig?.temperature)
-            .collect { newText ->
-                Log.d("ChatViewModel", "Collected new text chunk: '$newText'")
-                updateLastMessage(conversation.id) { it.copy(text = it.text + newText) }
+        chatWithHttp.generateStream(
+            conversation.modelName,
+            history,
+            0.8,
+            0.8,
+            _state.value.enableSearch,
+            _state.value.enableThinking
+        ).collect { newChunk ->
+            Log.d("ChatViewModel", "Received new chunk")
+            val streamDelta = gson.fromJson(newChunk, StreamDelta::class.java)
+            val newText = streamDelta.content?.takeIf { it != "null" } ?: ""
+            val newReason = streamDelta.reasoning_content?.takeIf { it != "null" } ?: ""
+            Log.d("ChatViewModel", "Collected new text chunk: '$newReason'")
+
+            updateLastMessage(conversation.id) {
+                it.copy(
+                    text = it.text + newText,
+                    reason_text = it.reason_text + newReason
+                )
             }
+        }
         Log.d("ChatViewModel", "Finished collecting from generateStream")
+
+        // Insert messages after stream is complete
+        val finalConversation = _state.value.getActiveConversation()
+        if (finalConversation != null && finalConversation.messages.size >= 2) {
+            val userMessage = finalConversation.messages[finalConversation.messages.size - 2]
+            val aiMessage = finalConversation.messages.last()
+            viewModelScope.launch {
+                conversationRepository.insertMessage(userMessage.copy(id = 0))
+                conversationRepository.insertMessage(aiMessage.copy(id = 0))
+            }
+        }
     }
 
     private suspend fun executeImageGeneration(conversation: Conversation) {
@@ -175,6 +229,17 @@ class ChatViewModel(
             updateLastMessage(conversation.id) { it.copy(imageUrl = imageUrl) }
         } else {
             updateLastMessage(conversation.id) { it.copy(text = "图片生成失败，请重试。") }
+        }
+
+        // Insert messages after image generation is complete
+        val finalConversation = _state.value.getActiveConversation()
+        if (finalConversation != null && finalConversation.messages.size >= 2) {
+            val userMessageToSave = finalConversation.messages[finalConversation.messages.size - 2]
+            val aiMessageToSave = finalConversation.messages.last()
+            viewModelScope.launch {
+                conversationRepository.insertMessage(userMessageToSave.copy(id = 0))
+                conversationRepository.insertMessage(aiMessageToSave.copy(id = 0))
+            }
         }
     }
 
@@ -191,8 +256,12 @@ class ChatViewModel(
         _state.update { currentState ->
             val updatedConversations = currentState.conversations.map {
                 if (it.id == conversationId) {
-                    val updatedMessages = it.messages.dropLast(1) + update(it.messages.last())
-                    it.copy(messages = updatedMessages)
+                    if (it.messages.isEmpty()) {
+                        it
+                    } else {
+                        val updatedMessages = it.messages.dropLast(1) + update(it.messages.last())
+                        it.copy(messages = updatedMessages)
+                    }
                 } else {
                     it
                 }
@@ -211,5 +280,25 @@ class ChatViewModel(
                 }
             }
         }
+    }
+
+    private fun ConversationWithMessages.toConversation(): Conversation {
+        return Conversation(
+            id = this.conversation.id,
+            modelName = this.conversation.modelName,
+            title = this.conversation.title,
+            messages = this.messages,
+            creationTimestamp = this.conversation.creationTimestamp
+        )
+    }
+
+    private fun ConversationEntity.toConversation(): Conversation {
+        return Conversation(
+            id = this.id,
+            modelName = this.modelName,
+            title = this.title,
+            messages = emptyList(),
+            creationTimestamp = this.creationTimestamp
+        )
     }
 }
