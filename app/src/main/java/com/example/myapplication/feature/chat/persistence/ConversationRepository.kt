@@ -3,7 +3,8 @@ package com.example.myapplication.feature.chat.persistence
 import com.example.myapplication.feature.chat.model.ChatMessage
 import com.example.myapplication.feature.chat.model.ConversationEntity
 import com.example.myapplication.feature.chat.model.ConversationWithMessages
-
+import com.example.myapplication.feature.chat.model.uploadImageIndex
+import kotlinx.coroutines.flow.first
 class ConversationRepository(private val conversationDao: ConversationDao) {
 
     suspend fun getConversationsWithMessages(): List<ConversationWithMessages> {
@@ -34,5 +35,19 @@ class ConversationRepository(private val conversationDao: ConversationDao) {
         )
         conversationDao.insertConversation(conversation)
         conversationDao.insertMessage(firstMessage.copy(conversationId = conversation.id))
+    }
+    suspend fun insertImageIndex(index: uploadImageIndex) {
+        conversationDao.insertImageIndex(index)
+    }
+
+    suspend fun getAllImageIndexes(): List<uploadImageIndex> {
+        // 使用 runBlocking 或其他方式，这里假设一个 suspend fun 的 DAO
+        // 如果 DAO 返回 Flow，则需要用 .first()
+        // 假设DAO是 suspend fun getAllImageIndexes(): List<ImageUploadIndex>
+        return conversationDao.getAllImageIndexes().first() // 假设从Flow获取一次性列表
+    }
+
+    suspend fun deleteExpiredIndexes(expirationTime: Long) {
+        conversationDao.deleteExpiredIndexes(expirationTime)
     }
 }

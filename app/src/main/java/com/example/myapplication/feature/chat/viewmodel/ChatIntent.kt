@@ -1,5 +1,6 @@
 package com.example.myapplication.feature.chat.viewmodel
 
+import android.net.Uri
 import com.example.myapplication.feature.chat.model.ImageGenParams
 
 sealed class ChatIntent {
@@ -14,4 +15,6 @@ sealed class ChatIntent {
     data class SetEnableThinking(val enabled: Boolean) : ChatIntent()
     data class DeleteConversation(val conversationId: String) : ChatIntent()
     object ClearInput : ChatIntent()
+    data class SelectImage(val uri: Uri) : ChatIntent()
+    data class ClearSelectedImage(val uri: Uri? = null) : ChatIntent()
 }

@@ -19,7 +19,7 @@ data class TextGenerationRequest(
     @SerializedName("stream_options")
     val stream_option: stream_option,
     @SerializedName("enable_search")
-    val enable_search: Boolean,
+    val enable_search: Boolean? = null,
     @SerializedName("enable_thinking")
     val enable_thinking: Boolean
 )

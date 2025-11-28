@@ -9,7 +9,28 @@ data class Message(
     @SerializedName("role")
     val role: String,
     @SerializedName("content")
-    val content: String // Content is a simple String
+    val content: Any // Can be String or List<ContentPart>
+)
+
+sealed class ContentPart
+
+data class TextPart(
+    @SerializedName("type")
+    val type: String = "text",
+    @SerializedName("text")
+    val text: String
+) : ContentPart()
+
+data class ImageUrlPart(
+    @SerializedName("type")
+    val type: String = "image_url",
+    @SerializedName("image_url")
+    val imageUrl: ImageUrl
+) : ContentPart()
+
+data class ImageUrl(
+    @SerializedName("url")
+    val url: String
 )
 
 // This is the correct top-level request object

@@ -37,14 +37,17 @@ fun MessageList(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         items(messages, key = { it.id  }) { message ->
-            if (message.imageUrl != null) {
+            // Only use ImageMessageItem for AI-generated images.
+            // User messages with images are handled by MessageBubble.
+            if (!message.imageUrl.isNullOrEmpty()) {
                 ImageMessageItem(
-                    imageUrl = message.imageUrl,
-                    onSaveClicked = onSaveImageClicked
+                    // 将整个列表传递给组件
+                    imageUrls = message.imageUrl,  // <-- 修改这里
+                    onSaveClicked = onSaveImageClicked,
+                    isUserMessage = message.isUser
                 )
-            } else {
-                MessageBubble(message)
             }
+            MessageBubble(message)
         }
     }
 }

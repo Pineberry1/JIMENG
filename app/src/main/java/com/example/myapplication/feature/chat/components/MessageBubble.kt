@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
@@ -20,10 +21,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
 import com.example.myapplication.R
 import com.example.myapplication.feature.chat.model.ChatMessage
 import com.halilibo.richtext.commonmark.CommonmarkAstNodeParser
@@ -50,9 +53,12 @@ fun MessageBubble(message: ChatMessage) {
     ) {
         Row(
             verticalAlignment = Alignment.Top,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            // 1. 如果是用户，将内容推到末尾 (右侧)
+            horizontalArrangement = if (isUser) Arrangement.End else Arrangement.spacedBy(8.dp),
+            // 2. 让 Row 占满整个宽度，这样 Arrangement.End 才能生效
+            modifier = Modifier.fillMaxWidth()
         ) {
-            if (!isUser) {
+            if (!isUser && (message.text.isNotBlank() || message.reason_text.isNotBlank())) {
                 Image(
                     painter = painterResource(id = R.drawable.jimeng),
                     contentDescription = "AI Avatar",
@@ -86,28 +92,31 @@ fun MessageBubble(message: ChatMessage) {
                     }
                 }
 
-                Surface(
-                    color = bubbleColor,
-                    shape = shape,
-                    shadowElevation = 2.dp,
-                    modifier = Modifier.widthIn(max = screenWidth * 0.8f)
-                ) {
-                    Column(modifier = Modifier.padding(12.dp)) {
-                        CompositionLocalProvider(LocalContentColor provides textColor) {
-                            RichText {
-                                val parser = remember { CommonmarkAstNodeParser() }
-                                val astNode = remember(parser, message.text) {
-                                    parser.parse(message.text)
+
+                if (message.text.isNotBlank()) {
+                    Surface(
+                        color = bubbleColor,
+                        shape = shape,
+                        shadowElevation = 2.dp,
+                        modifier = Modifier.widthIn(max = screenWidth * 0.8f)
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            CompositionLocalProvider(LocalContentColor provides textColor) {
+                                RichText {
+                                    val parser = remember { CommonmarkAstNodeParser() }
+                                    val astNode = remember(parser, message.text) {
+                                        parser.parse(message.text)
+                                    }
+                                    BasicMarkdown(astNode)
                                 }
-                                BasicMarkdown(astNode)
                             }
+                            Text(
+                                text = message.timestamp,
+                                color = textColor.copy(alpha = 0.7f),
+                                fontSize = 12.sp,
+                                modifier = Modifier.padding(top = 4.dp)
+                            )
                         }
-                        Text(
-                            text = message.timestamp,
-                            color = textColor.copy(alpha = 0.7f),
-                            fontSize = 12.sp,
-                            modifier = Modifier.padding(top = 4.dp)
-                        )
                     }
                 }
             }

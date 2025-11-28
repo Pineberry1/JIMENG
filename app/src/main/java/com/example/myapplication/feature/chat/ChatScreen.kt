@@ -92,9 +92,19 @@ fun ChatScreen(
                 )
             },
             bottomBar = {
-                 Column {
+                Column {
                     val isTextModel = state.getActiveConversation()?.modelName?.startsWith("qwen") ?: true &&
                             state.getActiveConversation()?.modelName != "qwen-image-plus"
+
+                    if (!state.selectedImageUri.isNullOrEmpty()) {
+                        ImagePreview(
+                            uri = state.selectedImageUri!!,
+                            isUploading = state.isUploadingImage,
+                            onClear = { uriToRemove ->
+                                viewModel.processIntent(ChatIntent.ClearSelectedImage(uriToRemove))
+                            })
+                    }
+
                     if (isTextModel) {
                         Row(
                             modifier = Modifier
@@ -116,9 +126,12 @@ fun ChatScreen(
                             )
                         }
                     }
+
+                    val canSendMessage = (state.inputText.isNotBlank() || state.uploadedImageUrl != null) && !state.isLoading && !state.isUploadingImage
+
                     ChatInputBar(
                         inputText = state.inputText,
-                        isLoading = state.isLoading,
+                        canSendMessage = canSendMessage,
                         onInputTextChanged = { text -> viewModel.processIntent(ChatIntent.UpdateInputText(text)) },
                         onSendMessage = { text ->
                             val activeConversation = state.getActiveConversation()
@@ -129,7 +142,11 @@ fun ChatScreen(
                                     isNewConversation = activeConversation == null
                                 )
                             )
-                        }
+                        },
+                        onImageSelected = { uri ->
+                            viewModel.processIntent(ChatIntent.SelectImage(uri))
+                        },
+                        isImageModel = state.getActiveConversation()?.modelName == "qwen-vl-plus"
                     )
                 }
             }
@@ -141,7 +158,10 @@ fun ChatScreen(
                     WelcomeScreen(
                         availableModels = state.availableModels,
                         selectedModel = selectedModel,
-                        onModelSelected = { selectedModel = it }
+                        onModelSelected = { newModel ->
+                            selectedModel = newModel
+                            viewModel.processIntent(ChatIntent.SelectModel(newModel))
+                        }
                     )
                 } else {
                     MessageList(

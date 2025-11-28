@@ -52,6 +52,35 @@ class ChatWithHttp(private val apiKey: String) {
         }
     }.flowOn(Dispatchers.IO)
 
+    suspend fun generateStreamWithImage(modelName: String, conversationHistory: List<Message>, topP: Double?, temperature: Double?, enable_thinking: Boolean): Flow<String> = flow {
+        val request = createGenerationRequestForImage(modelName, conversationHistory, true, enable_thinking)
+
+        val requestJson = gson.toJson(request)
+        Log.d("ChatWithHttp", "Request Body: $requestJson")
+
+        val responseBody = apiService.generateTxtWithImage("Bearer $apiKey", request = request)
+        responseBody.byteStream().bufferedReader().useLines { lines ->
+            lines.forEach { line ->
+                Log.d("ChatWithHttp", "Stream Raw Line: $line")
+                val trimmedLine = line.trim()
+                if (trimmedLine.startsWith("data:")) {
+                    val json = trimmedLine.substring(5).trim()
+                    if (json != "[DONE]") {
+                        try {
+                            val chunk = gson.fromJson(json, ChatCompletionChunk::class.java)
+                            val delta = chunk.choices.firstOrNull()?.delta
+                            if (delta != null) {
+                                emit(gson.toJson(delta))
+                            }
+                        } catch (e: Exception) {
+                            Log.e("ChatWithHttp", "Error parsing JSON chunk: $json", e)
+                        }
+                    }
+                }
+            }
+        }
+    }.flowOn(Dispatchers.IO)
+
     suspend fun generateImage(params: ImageGenParams, text: String): String {
         val request = QwenImageRequest(
             model = "qwen-image-plus",
@@ -92,6 +121,21 @@ class ChatWithHttp(private val apiKey: String) {
             stream_option = stream_option(include_usage = true),
             enable_thinking = enable_thinking,
             enable_search = enable_search
+        )
+    }
+
+    private fun createGenerationRequestForImage(
+        model: String,
+        messages: List<Message>,
+        stream: Boolean,
+        enable_thinking: Boolean
+    ): TextGenerationRequest {
+        return TextGenerationRequest(
+            model = model,
+            messages = messages,
+            stream = stream,
+            stream_option = stream_option(include_usage = true),
+            enable_thinking = enable_thinking
         )
     }
 }

@@ -2,6 +2,7 @@ package com.example.myapplication.feature.chat.model
 
 import androidx.room.Entity
 import androidx.room.ForeignKey
+import androidx.room.Index
 import androidx.room.PrimaryKey
 
 @Entity(
@@ -13,7 +14,8 @@ import androidx.room.PrimaryKey
             childColumns = ["conversationId"],
             onDelete = ForeignKey.CASCADE
         )
-    ]
+    ],
+    indices = [Index(value = ["conversationId"])]
 )
 data class ChatMessage(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
@@ -21,6 +23,6 @@ data class ChatMessage(
     val text: String,
     val isUser: Boolean,
     val timestamp: String,
-    val imageUrl: String? = null,
+    val imageUrl: List<String> ?= emptyList(),
     val reason_text: String = ""
 )

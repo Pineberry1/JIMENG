@@ -1,23 +1,37 @@
 package com.example.myapplication.feature.chat.components
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.AddAPhoto
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.background  // ✅ 添加这行导入
+
 @Composable
 fun ChatInputBar(
     inputText: String,
-    isLoading: Boolean,
+    canSendMessage: Boolean,
     onInputTextChanged: (String) -> Unit,
-    onSendMessage: (String) -> Unit
+    onSendMessage: (String) -> Unit,
+    onImageSelected: (Uri) -> Unit,
+    isImageModel: Boolean
 ) {
+    val imagePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent(),
+        onResult = { uri: Uri? ->
+            uri?.let { onImageSelected(it) }
+        }
+    )
+
     Surface(
         shadowElevation = 8.dp,
         color = Color.White
@@ -28,6 +42,14 @@ fun ChatInputBar(
                 .padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            if (isImageModel) {
+                IconButton(onClick = { imagePickerLauncher.launch("image/*") }) {
+                    Icon(
+                        imageVector = Icons.Default.AddAPhoto,
+                        contentDescription = "Add Image"
+                    )
+                }
+            }
             OutlinedTextField(
                 value = inputText,
                 onValueChange = onInputTextChanged,
@@ -37,23 +59,22 @@ fun ChatInputBar(
                     .padding(end = 8.dp),
                 shape = RoundedCornerShape(24.dp),
                 maxLines = 3,
-                enabled = !isLoading
+                enabled = true
             )
 
             IconButton(
                 onClick = {
-                    if (inputText.isNotBlank() && !isLoading) {
+                    if (canSendMessage) {
                         onSendMessage(inputText)
                     }
                 },
                 modifier = Modifier
                     .size(48.dp)
                     .background(
-                        color = if (inputText.isNotBlank() && !isLoading)
-                            Color(0xFF007AFF) else Color.Gray,
+                        color = if (canSendMessage) Color(0xFF007AFF) else Color.Gray,
                         shape = RoundedCornerShape(24.dp)
                     ),
-                enabled = inputText.isNotBlank() && !isLoading
+                enabled = canSendMessage
             ) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.Send,
