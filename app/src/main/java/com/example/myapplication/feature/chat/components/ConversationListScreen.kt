@@ -1,6 +1,7 @@
 package com.example.myapplication.feature.chat.components
 
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,10 +13,11 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -25,16 +27,43 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun ConversationListScreen(
     conversations: List<Conversation>,
     availableModels: List<String>,
     onConversationClicked: (String) -> Unit,
     onNewConversationClicked: (String) -> Unit,
-    onNavigateToSettings: () -> Unit
+    onNavigateToSettings: () -> Unit,
+    onDeleteConversation: (String) -> Unit
 ) {
     var showModelMenu by remember { mutableStateOf(false) }
+    var conversationToDelete by remember { mutableStateOf<Conversation?>(null) }
+
+    if (conversationToDelete != null) {
+        AlertDialog(
+            onDismissRequest = { conversationToDelete = null },
+            title = { Text("Delete Conversation") },
+            text = { Text("Are you sure you want to delete this conversation?") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        conversationToDelete?.id?.let(onDeleteConversation)
+                        conversationToDelete = null
+                    }
+                ) {
+                    Text("Delete")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { conversationToDelete = null }
+                ) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
 
     Scaffold(
         topBar = {
@@ -69,29 +98,41 @@ fun ConversationListScreen(
             }
         }
     ) { padding ->
+        // 在 LazyColumn 中对传入的列表进行排序
+        // sortedByDescending 会返回一个新的、已排序的列表，而不会改变原始的 conversations 列表
+        val sortedConversations = conversations.sortedByDescending { it.timestamp }
+
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding),
-            contentPadding = padding
+                .padding(padding)
         ) {
-            items(conversations, key = { it.id }) {
-                ConversationItem(conversation = it, onClick = { onConversationClicked(it.id) })
+            items(sortedConversations, key = { it.id }) { conversation ->
+                ConversationItem(
+                    conversation = conversation,
+                    onClick = { onConversationClicked(conversation.id) },
+                    onLongClick = { conversationToDelete = conversation }
+                )
             }
         }
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun ConversationItem(
     conversation: Conversation,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onLongClick: () -> Unit
 ) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 8.dp, vertical = 4.dp)
-            .clickable(onClick = onClick)
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick
+            )
     ) {
         Row(
             modifier = Modifier.padding(12.dp),
@@ -103,7 +144,7 @@ private fun ConversationItem(
                 Text(text = conversation.messages.lastOrNull()?.text ?: "New Conversation", maxLines = 1)
             }
             Text(
-                text = SimpleDateFormat("MM-dd HH:mm", Locale.getDefault()).format(Date(conversation.creationTimestamp)),
+                text = SimpleDateFormat("MM-dd HH:mm", Locale.getDefault()).format(Date(conversation.timestamp)),
                 style = MaterialTheme.typography.labelSmall
             )
         }

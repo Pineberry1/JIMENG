@@ -4,6 +4,7 @@ import android.app.Application
 import android.net.Uri
 import android.os.Debug
 import android.util.Log
+import androidx.compose.ui.semantics.text
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.myapplication.BuildConfig
@@ -28,6 +29,9 @@ import com.example.myapplication.feature.chat.persistence.ImagePersistenceManage
 import kotlinx.coroutines.Dispatchers
 import java.io.File
 import java.util.concurrent.TimeUnit
+import kotlin.compareTo
+import kotlin.div
+import kotlin.rem
 
 class ChatViewModel(
     private val application: Application,
@@ -52,8 +56,8 @@ class ChatViewModel(
             processIntent(ChatIntent.StartDebugSequence(DebugCases.case3, DebugCases.modelName))
         }
         viewModelScope.launch(Dispatchers.IO) {
-            // 计算48小时前的毫秒时间戳
-            val expirationTime = System.currentTimeMillis() - TimeUnit.HOURS.toMillis(48)
+            // 计算40小时前的毫秒时间戳
+            val expirationTime = System.currentTimeMillis() - TimeUnit.HOURS.toMillis(40)
 
             // 1. 从数据库删除过期的索引
             conversationRepository.deleteExpiredIndexes(expirationTime)
@@ -97,6 +101,8 @@ class ChatViewModel(
             is ChatIntent.DeleteConversation -> {
                 viewModelScope.launch {
                     conversationRepository.deleteConversation(intent.conversationId)
+                    deleteSummary(application, intent.conversationId)
+
                     // Also remove from UI state
                     _state.update {
                         val conversations = it.conversations.filter { conv -> conv.id != intent.conversationId }
@@ -105,6 +111,7 @@ class ChatViewModel(
                             activeConversationId = if(it.activeConversationId == intent.conversationId) conversations.firstOrNull()?.id else it.activeConversationId
                         )
                     }
+
                 }
             }
         }
@@ -168,6 +175,24 @@ class ChatViewModel(
             // 将本地的 Uri 转换成 String 列表传递下去
             val localImageUris = imageUriToSend.map { it.toString() }
             executeConversationTurn(text, localImageUris)
+            //修改对话时间
+            val activeConversationId = _state.value.activeConversationId ?: return@launch
+            val curtime = System.currentTimeMillis()
+            _state.update { currentState ->
+                val updatedConversations = currentState.conversations.map { conversation ->
+                    if (conversation.id == activeConversationId) {
+                        // 找到匹配的对话，使用 copy 创建一个新实例并更新时间戳
+                        conversation.copy(timestamp = curtime)
+                    } else {
+                        // 其他对话保持不变
+                        conversation
+                    }
+                }
+                // 使用 copy 更新整个 state
+                currentState.copy(conversations = updatedConversations)
+            }
+            val curConversation = _state.value.getActiveConversation()?: return@launch
+            conversationRepository.updateConversationDetails(activeConversationId, curtime, title = curConversation.title)
         }
     }
 
@@ -205,6 +230,7 @@ class ChatViewModel(
             _sideEffect.emit(ChatSideEffect.ShowError("请求失败: ${e.message}"))
         } finally {
             _state.update { it.copy(isLoading = false) }
+            summarizeConversationIfNeeded()
         }
     }
 
@@ -270,11 +296,29 @@ class ChatViewModel(
 
             Message(role = if (msg.isUser) "user" else "assistant", content = content)
         }
+        val combinedHistory: List<Message>
+        val turnsToKeep = 5 // 保留最近5轮对话
+        val messagesToKeep = turnsToKeep * 2
 
+        val recentHistory = if (history.size > messagesToKeep) {
+            history.takeLast(messagesToKeep)
+        } else {
+            history
+        }
+        val summary = readSummary(application, conversation.id)
+        if (summary.isNotBlank()) {
+            val summaryMessage = Message(
+                role = "system",
+                content = "这是之前对话的摘要，请将其作为上下文：\n$summary"
+            )
+            combinedHistory = listOf(summaryMessage) + recentHistory
+        } else {
+            combinedHistory = recentHistory
+        }
         val streamAction = if (conversation.modelName == "qwen-vl-plus") {
             chatWithHttp.generateStreamWithImage(
                 conversation.modelName,
-                history,
+                combinedHistory,
                 0.8,
                 0.8,
                 _state.value.enableThinking
@@ -282,7 +326,7 @@ class ChatViewModel(
         } else {
             chatWithHttp.generateStream(
                 conversation.modelName,
-                history,
+                combinedHistory,
                 0.8,
                 0.8,
                 _state.value.enableSearch,
@@ -311,8 +355,8 @@ class ChatViewModel(
             val userMessage = finalConversation.messages[finalConversation.messages.size - 2]
             val aiMessage = finalConversation.messages.last()
             viewModelScope.launch {
-                conversationRepository.insertMessage(userMessage.copy(id = 0))
                 conversationRepository.insertMessage(aiMessage.copy(id = 0))
+                conversationRepository.insertMessage(userMessage.copy(id = 0))
             }
         }
     }
@@ -343,6 +387,7 @@ class ChatViewModel(
 
     private fun updateConversationMessages(conversationId: String, messages: List<ChatMessage>) {
         _state.update { currentState ->
+            Log.d("ChatViewModel", "Updating messages for conversation $conversationId")
             val updatedConversations = currentState.conversations.map {
                 if (it.id == conversationId) it.copy(messages = messages) else it
             }
@@ -417,7 +462,8 @@ class ChatViewModel(
             modelName = this.conversation.modelName,
             title = this.conversation.title,
             messages = this.messages,
-            creationTimestamp = this.conversation.creationTimestamp
+            timestamp = this.conversation.creationTimestamp,
+
         )
     }
 
@@ -427,7 +473,68 @@ class ChatViewModel(
             modelName = this.modelName,
             title = this.title,
             messages = emptyList(),
-            creationTimestamp = this.creationTimestamp
+            timestamp = this.creationTimestamp,
+
         )
+    }
+    private fun Conversation.toConversationEntity(): ConversationEntity {
+        return ConversationEntity(
+            id = this.id,
+            modelName = this.modelName,
+            title = this.title,
+            creationTimestamp = this.timestamp,
+
+        )
+    }
+    suspend fun summarizeConversationIfNeeded() {
+        val conversation = _state.value.getActiveConversation() ?: return
+        // 用户消息 + AI消息 才算一轮，所以要乘以2
+        // 我们在总结后不会删除旧消息，所以每次都检查总消息数
+        // 假设 numTurnsSinceLastSummary 是我们需要跟踪的状态，这里简化为检查消息总数
+        val messages = conversation.messages.filter { it.text.isNotBlank() || !it.imageUrl.isNullOrEmpty() }
+        val turns = messages.size / 2
+        // 每5轮触发一次 (即消息数达到 10, 20, 30...)
+        if (turns > 0 && turns % 5 == 0) {
+            // 检查最近一条消息是否是AI的，确保不是在AI响应中途触发
+            if (messages.lastOrNull()?.isUser == false) {
+                Log.d("ChatViewModel", "Triggering summarization for conversation ${conversation.id} at $turns turns.")
+                try {
+                    // 获取最近10条消息 (5轮)
+                    val recentMessages = convertChatMessagesToApiMessages(conversation.messages.takeLast(10))
+                    val previousSummary = readSummary(application, conversation.id)
+
+                    // 假设 chatWithHttp 有一个 generateSummary 方法
+                    val newSummaryPart = chatWithHttp.generateSummary(previousSummary, recentMessages)
+
+                    if (newSummaryPart.isNotBlank()) {
+                        appendToSummary(application, conversation.id, newSummaryPart)
+                        Log.d("ChatViewModel", "Successfully appended new summary part.")
+                    }
+                } catch (e: Exception) {
+                    Log.e("ChatViewModel", "Summarization failed", e)
+                    // 总结失败不应影响用户体验，只记录日志
+                }
+            }
+        }
+    }
+    private fun convertChatMessagesToApiMessages(messages: List<ChatMessage>): List<Message> {
+        return messages.mapNotNull { msg ->
+            // 忽略完全空的消息
+            if (msg.text.isBlank() && msg.imageUrl.isNullOrEmpty()) {
+                return@mapNotNull null
+            }
+
+            // 对于摘要生成，我们只关心文本内容
+            // 未来如果摘要也需要支持图片，这里的逻辑需要扩展
+            if (msg.text.isNotBlank()) {
+                Message(
+                    role = if (msg.isUser) "user" else "assistant",
+                    content = msg.text
+                )
+            } else {
+                // 如果消息只有图片没有文本，在生成纯文本摘要时可以忽略
+                null
+            }
+        }
     }
 }

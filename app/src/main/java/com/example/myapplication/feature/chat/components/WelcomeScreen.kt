@@ -50,35 +50,13 @@ fun WelcomeScreen(
         )
         Spacer(modifier = Modifier.height(8.dp))
         Text(
-            text = "我可以和你对话、作图、写作，请你把人物交给我吧~",
+            text = "我可以和你对话、作图、写作，请你把任务交给我吧~",
             style = MaterialTheme.typography.bodyLarge,
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(horizontal = 32.dp)
         )
         Spacer(modifier = Modifier.height(32.dp))
-
-        ModelSelector(availableModels, selectedModel, onModelSelected)
     }
 }
 
-@Composable
-fun ModelSelector(models: List<String>, selectedModel: String, onModelSelected: (String) -> Unit) {
-    var expanded by remember { mutableStateOf(false) }
 
-    Box {
-        Card(onClick = { expanded = true }) {
-            Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("Model: $selectedModel")
-            }
-        }
-
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            models.forEach { model ->
-                DropdownMenuItem(text = { Text(model) }, onClick = {
-                    onModelSelected(model)
-                    expanded = false
-                })
-            }
-        }
-    }
-}

@@ -19,6 +19,11 @@ class ConversationRepository(private val conversationDao: ConversationDao) {
         conversationDao.insertConversation(conversation)
     }
 
+    suspend fun updateConversationDetails(conversationId: String, timestamp: Long, title: String) {
+        conversationDao.updateConversationDetails(conversationId, timestamp, title)
+    }
+
+
     suspend fun insertMessage(message: ChatMessage) {
         conversationDao.insertMessage(message)
     }

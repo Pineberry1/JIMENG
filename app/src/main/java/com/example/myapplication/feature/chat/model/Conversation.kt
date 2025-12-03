@@ -7,5 +7,5 @@ data class Conversation(
     val modelName: String,
     val title: String,
     val messages: List<ChatMessage> = emptyList(),
-    val creationTimestamp: Long = System.currentTimeMillis()
+    val timestamp: Long = System.currentTimeMillis()
 )

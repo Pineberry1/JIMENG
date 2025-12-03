@@ -24,6 +24,10 @@ interface ConversationDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertConversation(conversation: ConversationEntity)
 
+    @Query("UPDATE conversations SET creationTimestamp = :timestamp, title = :title WHERE id = :conversationId")
+    suspend fun updateConversationDetails(conversationId: String, timestamp: Long, title: String)
+
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertMessage(message: ChatMessage)
 
@@ -40,4 +44,5 @@ interface ConversationDao {
 
     @Query("DELETE FROM image_upload_index WHERE creationTimestamp < :expirationTime")
     suspend fun deleteExpiredIndexes(expirationTime: Long)
+
 }

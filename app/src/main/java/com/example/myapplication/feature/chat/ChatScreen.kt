@@ -67,7 +67,10 @@ fun ChatScreen(
                         viewModel.processIntent(ChatIntent.SelectModel(modelName))
                         coroutineScope.launch { drawerState.close() }
                     },
-                    onNavigateToSettings = onNavigateToSettings
+                    onNavigateToSettings = onNavigateToSettings,
+                    onDeleteConversation = { conversationId ->
+                        viewModel.processIntent(ChatIntent.DeleteConversation(conversationId))
+                    },
                 )
             }
         }
