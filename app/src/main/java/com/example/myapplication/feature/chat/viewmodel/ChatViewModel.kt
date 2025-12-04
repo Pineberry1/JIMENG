@@ -165,7 +165,6 @@ class ChatViewModel(
     private fun sendMessage(text: String, modelName: String, isNewConversation: Boolean) {
         val imageUriToSend = _state.value.selectedImageUri
         if (text.isBlank() && imageUriToSend.isEmpty()) return
-
         clearInput() // 清除UI输入
 
         viewModelScope.launch {
@@ -355,8 +354,8 @@ class ChatViewModel(
             val userMessage = finalConversation.messages[finalConversation.messages.size - 2]
             val aiMessage = finalConversation.messages.last()
             viewModelScope.launch {
-                conversationRepository.insertMessage(aiMessage.copy(id = 0))
                 conversationRepository.insertMessage(userMessage.copy(id = 0))
+                conversationRepository.insertMessage(aiMessage.copy(id = 0))
             }
         }
     }

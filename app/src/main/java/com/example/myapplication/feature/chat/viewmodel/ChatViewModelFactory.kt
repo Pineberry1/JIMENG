@@ -13,7 +13,7 @@ class ChatViewModelFactory(private val application: Application) : ViewModelProv
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(ChatViewModel::class.java)) {
             val settingsRepository = ModelSettingsRepository(application)
-            val chatWithHttp = ChatWithHttp(BuildConfig.DASHSCOPE_API_KEY)
+            val chatWithHttp = ChatWithHttp("sk-135ccd0346344aabaeefaa497b687340")
             
             // Create database and repository for conversations
             val database = AppDatabase.getDatabase(application)

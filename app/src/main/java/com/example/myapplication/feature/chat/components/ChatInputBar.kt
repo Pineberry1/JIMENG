@@ -14,6 +14,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.unit.dp
 
 @Composable
@@ -25,6 +26,7 @@ fun ChatInputBar(
     onImageSelected: (Uri) -> Unit,
     isImageModel: Boolean
 ) {
+    val keyboardController = LocalSoftwareKeyboardController.current
     val imagePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent(),
         onResult = { uri: Uri? ->
@@ -65,6 +67,7 @@ fun ChatInputBar(
             IconButton(
                 onClick = {
                     if (canSendMessage) {
+                        keyboardController?.hide()
                         onSendMessage(inputText)
                     }
                 },

@@ -19,7 +19,7 @@ import com.example.myapplication.feature.chat.viewmodel.ChatSideEffect
 import com.example.myapplication.feature.chat.viewmodel.ChatViewModel
 import com.example.myapplication.feature.chat.viewmodel.ChatViewModelFactory
 import kotlinx.coroutines.launch
-
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController // 确保导入
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatScreen(
@@ -131,13 +131,14 @@ fun ChatScreen(
                     }
 
                     val canSendMessage = (state.inputText.isNotBlank() || state.uploadedImageUrl != null) && !state.isLoading && !state.isUploadingImage
-
+                    val keyboardController = LocalSoftwareKeyboardController.current
                     ChatInputBar(
                         inputText = state.inputText,
                         canSendMessage = canSendMessage,
                         onInputTextChanged = { text -> viewModel.processIntent(ChatIntent.UpdateInputText(text)) },
                         onSendMessage = { text ->
                             val activeConversation = state.getActiveConversation()
+
                             viewModel.processIntent(
                                 ChatIntent.SendMessage(
                                     text = text,

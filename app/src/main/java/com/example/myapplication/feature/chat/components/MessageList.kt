@@ -1,11 +1,10 @@
 package com.example.myapplication.feature.chat.components
 
 import android.util.Log
+import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
-
 import androidx.compose.foundation.layout.fillMaxSize
-
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -20,10 +19,8 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.example.myapplication.feature.chat.model.ChatMessage
-import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
-
-// import kotlinx.coroutines.flow.pairwise // <- 不再需要此导入
 
 @Composable
 fun MessageList(
@@ -32,10 +29,14 @@ fun MessageList(
 ) {
     val listState = rememberLazyListState()
     val lastMessage = messages.lastOrNull()
-    // 1. 引入“锁定到底部”的状态，默认为 true。
-    var isLockedToBottom by remember { mutableStateOf(true) }
+    // --- 状态定义 ---
+    // 1. 核心状态：列表是否应该自动滚动到底部。
+    var shouldFollowBottom by remember { mutableStateOf(true) }
 
-    // 2. 判断列表是否物理上滚动到底部的派生状态。
+    // 2. 派生状态：判断用户是否正在用手指拖动列表。
+    val isUserDragging by listState.interactionSource.collectIsDraggedAsState()
+
+    // 3. 派生状态：通过 listState 计算列表是否物理上滚动到底部。
     val isPhysicallyAtBottom by remember {
         derivedStateOf {
             val layoutInfo = listState.layoutInfo
@@ -43,63 +44,61 @@ fun MessageList(
             if (layoutInfo.totalItemsCount == 0 || visibleItemsInfo.isEmpty()) {
                 true
             } else {
-                // 1. 最后一个可见项的索引必须是整个列表的最后一项。
-                // 2. 该项的底部边缘必须在视口之内或底部。
                 val lastVisibleItem = visibleItemsInfo.last()
                 val isLastItemVisible = lastVisibleItem.index == layoutInfo.totalItemsCount - 1
                 val itemBottom = lastVisibleItem.offset + lastVisibleItem.size
                 val viewportBottom = layoutInfo.viewportEndOffset
-
-                isLastItemVisible && itemBottom <= viewportBottom
-            }
-        }
-    }
-    suspend fun scrollToBottom(){
-        listState.animateScrollToItem(index = messages.size - 1, scrollOffset = Int.MAX_VALUE)
-    }
-    // 3. 滚动逻辑：当处于锁定状态且最后一条消息内容变化时，滚动到底部。
-    LaunchedEffect(lastMessage?.text?.length, lastMessage?.reason_text?.length) {
-        if (isLockedToBottom && messages.isNotEmpty()) {
-            scrollToBottom()
-        }
-    }
-    //有新消息直接到最底层
-    LaunchedEffect(lastMessage?.timestamp) {
-        if (!isLockedToBottom && messages.isNotEmpty()) {
-            scrollToBottom()
-            isLockedToBottom = true
-            Log.d("MessageList", "List is physically at bottom. Re-locking.")
-        }
-    }
-
-    // 4. 重新锁定的逻辑 - 当用户滚动回底部时，自动重新锁定。
-    LaunchedEffect(isPhysicallyAtBottom) {
-        if (isPhysicallyAtBottom) {
-            if (!isLockedToBottom) {
-                Log.d("MessageList", "List is physically at bottom. Re-locking.")
-                isLockedToBottom = true
+                // 增加一个小小的容差值，避免因为浮点数精度问题导致判断失败
+                isLastItemVisible && itemBottom <= viewportBottom + 5
             }
         }
     }
 
-    // 5. 最终解锁逻辑：修复了锁定后立即解锁的冲突
-    LaunchedEffect(listState) {
-        var previousOffset = listState.firstVisibleItemScrollOffset
-        snapshotFlow { listState.firstVisibleItemScrollOffset }
-            .filter { currentOffset ->
-                val isScrollingUp = currentOffset > previousOffset
-                previousOffset = currentOffset // 更新上一次的偏移量
+    // --- 滚动与锁定逻辑 (最终、精确修复版) ---
 
-                // 核心修复：只有在“向上滚动”且“列表当前是锁定的”且“列表不在物理底部”时，才允许解锁
-                isScrollingUp && isLockedToBottom && !isPhysicallyAtBottom
-            }
+    // 1. 当用户向上滚动时，解锁“跟随底部”模式
+    LaunchedEffect(Unit) {
+        snapshotFlow { listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset }
+            .distinctUntilChanged()
+            .filter { isUserDragging && !isPhysicallyAtBottom } // 用户拖动且不在底部时解锁
             .collect {
-                Log.d("MessageList", "Unlocking list due to user scrolling UP.")
-                isLockedToBottom = false
+                if (shouldFollowBottom) {
+                    Log.d("MessageList", "User is scrolling up. Unlocking follow mode.")
+                    shouldFollowBottom = false
+                }
             }
     }
 
+    // 2. 当用户滚动回底部时，重新锁定
+    LaunchedEffect(isPhysicallyAtBottom) {
+        if (isPhysicallyAtBottom && !shouldFollowBottom) {
+            Log.d("MessageList", "User scrolled back to the bottom. Re-locking follow mode.")
+            shouldFollowBottom = true
+        }
+    }
 
+    // 3. 当有新消息时，如果需要，则执行【精确】的瞬时滚动到底部
+    LaunchedEffect(lastMessage?.text, lastMessage?.reason_text) {
+        val lastIndex = messages.size - 1
+        if (lastIndex < 0) return@LaunchedEffect
+
+        // 条件：需要跟随，且用户没有正在拖动或fling
+        if (shouldFollowBottom && !listState.isScrollInProgress) {
+            Log.d("MessageList", "message update")
+
+            // 使用瞬时滚动，避免所有动画竞态条件
+            listState.scrollToItem(lastIndex, scrollOffset = Int.MAX_VALUE)
+        }
+    }
+    LaunchedEffect(lastMessage?.timestamp){
+        if (lastMessage != null) {
+            shouldFollowBottom = true
+            Log.d("MessageList", "New message. lock and Performing precise scroll to bottom.")
+            listState.animateScrollToItem(messages.size - 1)
+            if(shouldFollowBottom)listState.scrollToItem(messages.size - 1, scrollOffset = Int.MAX_VALUE)
+        }
+    }
+    // --- UI 渲染 ---
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         state = listState,
@@ -107,7 +106,7 @@ fun MessageList(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         items(messages, key = { it.id }) { message ->
-            if (message.imageUrl != null && !message.isUser) {
+            if (message.imageUrl != null) {
                 ImageMessageItem(
                     imageUrls = message.imageUrl,
                     onSaveClicked = onSaveImageClicked,
