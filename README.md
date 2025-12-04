@@ -54,4 +54,5 @@ git checkout -b android_app origin/android_app
   source ~/.bashrc
   ```
 
-  
+
+- 配置完环境变量之后用android studio选个模拟器运行即可（API 26+）
