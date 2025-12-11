@@ -11,6 +11,7 @@ import com.example.myapplication.feature.chat.model.QwenMessage
 import com.example.myapplication.feature.chat.model.QwenContent
 import com.example.myapplication.feature.chat.model.QwenParameters
 import com.example.myapplication.feature.chat.model.RetrofitClient
+import com.example.myapplication.feature.chat.model.StreamChoice
 import com.example.myapplication.feature.chat.model.TextGenerationRequest
 import com.example.myapplication.feature.chat.model.stream_option
 import com.google.gson.Gson
@@ -18,19 +19,52 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
-
+import okhttp3.ResponseBody
+import com.example.myapplication.feature.chat.model.StreamDelta
+private val UPDATE_INTERVAL_MS = 50L
 class ChatWithHttp(private val apiKey: String) {
     private val apiService = RetrofitClient.dashScopeService
     private val gson = Gson()
 
-    suspend fun generateStream(modelName: String, conversationHistory: List<Message>, topP: Double?, temperature: Double?, enable_search: Boolean, enable_thinking: Boolean): Flow<String> = flow {
-        val request = createGenerationRequest(modelName, conversationHistory, true, enable_search, enable_thinking)
+    suspend fun generateStream(
+        modelName: String,
+        conversationHistory: List<Message>,
+        topP: Double?,
+        temperature: Double?,
+        enable_search: Boolean,
+        enable_thinking: Boolean
+    ): Flow<String> {
+        // 1. 准备请求参数
+        val request = createGenerationRequest(
+            modelName,
+            conversationHistory,
+            true,
+            enable_search,
+            enable_thinking
+        )
 
-        val requestJson = gson.toJson(request)
+        // 2. 调用通用函数
+        return executeStreamCall(request) {
+            // 传入具体的 API 调用逻辑
+            apiService.generateTxt("Bearer $apiKey", request)
+        }
+    }
+    private fun <T> executeStreamCall(
+        requestBody: T,
+        apiCall: suspend () -> ResponseBody
+    ): Flow<String> = flow {
+        // 1. 统一打印请求日志
+        val requestJson = gson.toJson(requestBody)
         Log.d("ChatWithHttp", "Request Body: $requestJson")
-        Log.d("ChatWithHttp", "API Request object: $request")
+        // 如果 T 的 toString() 有意义，也可以打印，但在 JSON 存在的情况下通常不需要
+        // Log.d("ChatWithHttp", "API Request object: $requestBody")
+        val contentBuffer = StringBuilder()
+        val reasonBuffer = StringBuilder()
+        var lastEmitTime = System.currentTimeMillis()
+        // 2. 执行传入的 API 调用
+        val responseBody = apiCall()
 
-        val responseBody = apiService.generateTxt("Bearer $apiKey", request)
+        // 3. 统一的流处理逻辑 (原封不动移过来)
         responseBody.byteStream().bufferedReader().useLines { lines ->
             lines.forEach { line ->
                 Log.d("ChatWithHttp", "Stream Raw Line: $line")
@@ -39,48 +73,70 @@ class ChatWithHttp(private val apiKey: String) {
                     val json = trimmedLine.substring(5).trim()
                     if (json != "[DONE]") {
                         try {
+                            // 2. 解析原始 Chunk
                             val chunk = gson.fromJson(json, ChatCompletionChunk::class.java)
                             val delta = chunk.choices.firstOrNull()?.delta
+
                             if (delta != null) {
-                                emit(gson.toJson(delta))
+                                // 3. 累加到缓冲区 (注意处理 null)
+                                if (!delta.content.isNullOrEmpty()) {
+                                    contentBuffer.append(delta.content)
+                                }
+                                if (!delta.reasoning_content.isNullOrEmpty()) {
+                                    reasonBuffer.append(delta.reasoning_content)
+                                }
+
+                                // 4. 检查时间：如果缓冲区有货 且 距离上次发射超过 50ms
+                                val currentTime = System.currentTimeMillis()
+                                val hasData = contentBuffer.isNotEmpty() || reasonBuffer.isNotEmpty()
+
+                                if (hasData && (currentTime - lastEmitTime >= UPDATE_INTERVAL_MS)) {
+                                    val accumulatedDelta = StreamDelta(
+                                        content = contentBuffer.toString(),
+                                        reasoning_content = reasonBuffer.toString(),
+                                        role = "assistant"
+                                    )
+
+                                    // 序列化成 JSON 字符串并发射
+                                    emit(gson.toJson(accumulatedDelta))
+                                    // --- 核心改动结束 ---
+
+                                    // 5. 清空缓冲区 & 重置计时器
+                                    contentBuffer.setLength(0) // 高效清空
+                                    reasonBuffer.setLength(0)
+                                    lastEmitTime = currentTime
+                                }
                             }
                         } catch (e: Exception) {
-                            Log.e("ChatWithHttp", "Error parsing JSON chunk: $json", e)
+                            Log.e("ChatWithHttp", "Error parsing chunk", e)
                         }
                     }
                 }
             }
         }
     }.flowOn(Dispatchers.IO)
+    suspend fun generateStreamWithImage(
+        modelName: String,
+        conversationHistory: List<Message>,
+        topP: Double?,
+        temperature: Double?,
+        enable_thinking: Boolean
+    ): Flow<String> {
+        // 1. 准备请求参数
+        val request = createGenerationRequestForImage(
+            modelName,
+            conversationHistory,
+            true,
+            enable_thinking
+        )
 
-    suspend fun generateStreamWithImage(modelName: String, conversationHistory: List<Message>, topP: Double?, temperature: Double?, enable_thinking: Boolean): Flow<String> = flow {
-        val request = createGenerationRequestForImage(modelName, conversationHistory, true, enable_thinking)
-
-        val requestJson = gson.toJson(request)
-        Log.d("ChatWithHttp", "Request Body: $requestJson")
-
-        val responseBody = apiService.generateTxtWithImage("Bearer $apiKey", request = request)
-        responseBody.byteStream().bufferedReader().useLines { lines ->
-            lines.forEach { line ->
-                Log.d("ChatWithHttp", "Stream Raw Line: $line")
-                val trimmedLine = line.trim()
-                if (trimmedLine.startsWith("data:")) {
-                    val json = trimmedLine.substring(5).trim()
-                    if (json != "[DONE]") {
-                        try {
-                            val chunk = gson.fromJson(json, ChatCompletionChunk::class.java)
-                            val delta = chunk.choices.firstOrNull()?.delta
-                            if (delta != null) {
-                                emit(gson.toJson(delta))
-                            }
-                        } catch (e: Exception) {
-                            Log.e("ChatWithHttp", "Error parsing JSON chunk: $json", e)
-                        }
-                    }
-                }
-            }
+        // 2. 调用通用函数
+        return executeStreamCall(request) {
+            // 传入具体的带图片的 API 调用逻辑
+            apiService.generateTxtWithImage("Bearer $apiKey", request = request)
         }
-    }.flowOn(Dispatchers.IO)
+    }
+
     suspend fun generateSummary(previousSummary: String, recentMessages: List<Message>): String {
         // 1. 定义总结任务的Prompt模板
         val promptTemplate = """

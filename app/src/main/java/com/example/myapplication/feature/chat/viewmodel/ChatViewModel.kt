@@ -297,7 +297,7 @@ class ChatViewModel(
         }
         val combinedHistory: List<Message>
         val turnsToKeep = 5 // 保留最近5轮对话
-        val messagesToKeep = turnsToKeep * 2
+        val messagesToKeep = turnsToKeep * 2 + 1
 
         val recentHistory = if (history.size > messagesToKeep) {
             history.takeLast(messagesToKeep)
@@ -333,7 +333,8 @@ class ChatViewModel(
             )
         }
 
-        streamAction.collect { newChunk ->
+        streamAction.
+        collect { newChunk ->
             Log.d("ChatViewModel", "Received new chunk")
             val streamDelta = gson.fromJson(newChunk, StreamDelta::class.java)
             val newText = streamDelta.content?.takeIf { it != "null" } ?: ""
@@ -343,7 +344,8 @@ class ChatViewModel(
             updateLastMessage(conversation.id) {
                 it.copy(
                     text = it.text + newText,
-                    reason_text = it.reason_text + newReason
+                    reason_text = it.reason_text + newReason,
+
                 )
             }
         }
@@ -396,22 +398,38 @@ class ChatViewModel(
 
     private fun updateLastMessage(conversationId: String, update: (ChatMessage) -> ChatMessage) {
         _state.update { currentState ->
-            val updatedConversations = currentState.conversations.map {
-                if (it.id == conversationId) {
-                    if (it.messages.isEmpty()) {
-                        it
-                    } else {
-                        val updatedMessages = it.messages.dropLast(1) + update(it.messages.last())
-                        it.copy(messages = updatedMessages)
-                    }
-                } else {
-                    it
-                }
+            // 寻找需要更新的对话的索引
+            val conversationIndex = currentState.conversations.indexOfFirst { it.id == conversationId }
+
+            // 如果没找到或者该对话没有消息，则不执行任何操作
+            if (conversationIndex == -1 || currentState.conversations[conversationIndex].messages.isEmpty()) {
+                return@update currentState
             }
+
+            // 获取当前对话
+            val targetConversation = currentState.conversations[conversationIndex]
+
+            // 获取并更新最后一条消息
+            val lastMessage = targetConversation.messages.last()
+            val updatedMessage = update(lastMessage)
+
+            // 【关键点】只替换最后一条消息，而不是整个消息列表
+            // 这种方式在流式输出（字符串累加）时，updatedMessage和lastMessage是不同的实例，
+            // 但对于Compose来说，消息列表的大部分内容是稳定的，可以进行更高效的差异比较。
+            val updatedMessages = targetConversation.messages.dropLast(1) + updatedMessage
+
+            // 创建一个新的对话对象来持有更新后的消息列表
+            val updatedConversation = targetConversation.copy(messages = updatedMessages)
+
+            // 创建一个新的顶级对话列表，只替换被修改的对话对象
+            val updatedConversations = currentState.conversations.toMutableList().apply {
+                set(conversationIndex, updatedConversation)
+            }
+
+            // 使用更新后的列表更新状态
             currentState.copy(conversations = updatedConversations)
         }
     }
-
     private fun saveImageToGallery(imageUrl: String) {
         ImageSaver.save(application, imageUrl) { success, message ->
             viewModelScope.launch {
@@ -537,3 +555,6 @@ class ChatViewModel(
         }
     }
 }
+
+
+

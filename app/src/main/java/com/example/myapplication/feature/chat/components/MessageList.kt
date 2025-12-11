@@ -94,8 +94,8 @@ fun MessageList(
         if (lastMessage != null) {
             shouldFollowBottom = true
             Log.d("MessageList", "New message. lock and Performing precise scroll to bottom.")
-            listState.animateScrollToItem(messages.size - 1)
-            if(shouldFollowBottom)listState.scrollToItem(messages.size - 1, scrollOffset = Int.MAX_VALUE)
+            listState.animateScrollToItem(messages.size - 2)
+            //if(shouldFollowBottom)listState.scrollToItem(messages.size - 1, scrollOffset = Int.MAX_VALUE)
         }
     }
     // --- UI 渲染 ---
